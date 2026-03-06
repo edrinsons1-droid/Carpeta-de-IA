@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Snake Mobile App</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #121212;
+            overflow: hidden;
+            /* Evitar cualquier scroll */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+            user-select: none;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            /* Dejar pasar los clics/swipes a Phaser */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .header {
+            padding: env(safe-area-inset-top, 20px) 20px 20px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: auto;
+            /* Para poder clicar botones aquí si hay */
+            background: linear-gradient(to bottom, rgba(18, 18, 18, 0.9), rgba(18, 18, 18, 0));
+        }
+
+        h1 {
+            color: white;
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 2px;
+        }
+
+        #score-display {
+            color: #4CAF50;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            transition: color 0.3s;
+        }
+
+        /* Menú Principal / Game Over / Skins superpuesto */
+        #menu-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(18, 18, 18, 0.85);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .menu-box {
+            background-color: #1e1e1e;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            border: 2px solid #4CAF50;
+            max-width: 90%;
+            width: 320px;
+        }
+
+        .menu-box h2 {
+            margin-top: 0;
+            font-size: 36px;
+            color: white;
+        }
+
+        .menu-box p {
+            color: #aaa;
+            font-size: 18px;
+            margin-bottom: 25px;
+        }
+
+        .btn-play {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 22px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+            transition: transform 0.1s, filter 0.2s;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .btn-play:active {
+            transform: scale(0.95);
+        }
+
+        .skins-title {
+            color: white;
+            font-size: 16px;
+            margin-bottom: 10px;
+            text-align: left;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.8;
+        }
+
+        .skins-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .skin-btn {
+            aspect-ratio: 1;
+            border-radius: 12px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .skin-btn.active {
+            border-color: white;
+            transform: scale(1.1);
+            box-shadow: 0 0 15px currentColor;
+        }
+
+        /* Indicador sutil de Swipe para celulares */
+        .swipe-hint {
+            position: absolute;
+            bottom: env(safe-area-inset-bottom, 30px);
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 14px;
+            pointer-events: none;
+            letter-spacing: 1px;
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Capa de Phaser (el juego real en WebGL/Canvas) -->
+    <div id="game-container"></div>
+
+    <!-- UI Overlay (Puntaje) -->
+    <div id="ui-layer" style="display: none;">
+        <div class="header">
+            <h1>NAVE ESPACIAL</h1>
+            <div id="score-display">0</div>
+        </div>
+        <div class="swipe-hint" id="swipe-hint">Desliza para mover (Swipe) o usa flechas</div>
+    </div>
+
+    <!-- Menú Principal y Game Over -->
+    <div id="menu-layer">
+        <div class="menu-box" id="menu-box">
+            <h2 id="menu-title">SPACE SNAKE</h2>
+            <p id="menu-subtitle">Versión Galáctica</p>
+
+            <button class="btn-play" id="btn-play" onclick="startGame()">JUGAR</button>
+
+            <div class="skins-title">Armario de Pieles</div>
+            <div class="skins-grid" id="skins-grid">
+                <!-- Generado dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DEFINICIÓN DE BANDOS / COLORES DE NAVE ---
+        const skins = {
+            clasica: { id: 'clasica', name: "Tierra", head: 0x4CAF50, body: 0x81C784, uiStr: "#4CAF50" },
+            fuego: { id: 'fuego', name: "Marte", head: 0xf44336, body: 0xff9800, uiStr: "#f44336" },
+            hielo: { id: 'hielo', name: "Urano", head: 0x00ACC1, body: 0x4DD0E1, uiStr: "#00ACC1" },
+            neon: { id: 'neon', name: "Cyber", head: 0xE040FB, body: 0xEA80FC, uiStr: "#E040FB" },
+            oro: { id: 'oro', name: "Solar", head: 0xFBC02D, body: 0xFFF176, uiStr: "#FBC02D" },
+            dark: { id: 'dark', name: "Fantasma", head: 0x607D8B, body: 0x90A4AE, uiStr: "#90A4AE" }
+        };
+
+        let currentSkin = skins.clasica;
+        let bestScore = localStorage.getItem('spaceSnakeBestScore') || 0;
+
+        // Elementos de la UI
+        const menuLayer = document.getElementById('menu-layer');
+        const uiLayer = document.getElementById('ui-layer');
+        const scoreDisplay = document.getElementById('score-display');
+        const skinsGrid = document.getElementById('skins-grid');
+        const menuBox = document.getElementById('menu-box');
+        const btnPlay = document.getElementById('btn-play');
+
+        // Renderizar botones de skins
+        function renderSkins() {
+            skinsGrid.innerHTML = '';
+            Object.values(skins).forEach(skin => {
+                const btn = document.createElement('div');
+                btn.className = 'skin-btn ' + (currentSkin.id === skin.id ? 'active' : '');
+                btn.style.backgroundColor = skin.uiStr;
+                btn.style.color = skin.uiStr; // Para el currentColor de box-shadow
+
+                btn.onclick = () => {
+                    currentSkin = skin;
+                    updateTheme();
+                    if (gameScene) {
+                        gameScene.updateTextures();
+                    }
+                };
+                skinsGrid.appendChild(btn);
+            });
+        }
+
+        function updateTheme() {
+            btnPlay.style.backgroundColor = currentSkin.uiStr;
+            btnPlay.style.boxShadow = `0 5px 15px ${currentSkin.uiStr}66`;
+            menuBox.style.borderColor = currentSkin.uiStr;
+            scoreDisplay.style.color = currentSkin.uiStr;
+            renderSkins();
+        }
+
+        updateTheme(); // Inicial y mejor puntaje en el menú
+        document.getElementById('menu-subtitle').innerText = `Mejor Puntaje: ${bestScore}`;
+
+        // ==========================================
+        //  LÓGICA DEL MOTOR PHASER 3
+        // ==========================================
+
+        const GRID_SIZE = 24; // Tamaño de bloque en la cuadrícula
+        const TICK_RATE = 120; // ms por movimiento
+
+        let game;
+        let gameScene;
+
+        class SnakeGame extends Phaser.Scene {
+            constructor() {
+                super({ key: 'SnakeGame' });
+            }
+
+            create() {
+                gameScene = this; // Referencia global
+
+                // Eliminar fondo de color si hubiéramos querido espacio
+                // this.cameras.main.setBackgroundColor('#050510');
+
+                // Generamos texturas dinámicas imitando naves y escudos (vagones)
+                this.generateTextures();
+
+                this.snake = []; // Sigue llamándose snake lógicamente (vagones de la nave)
+                this.direction = Phaser.Math.Vector2.RIGHT;
+                this.nextDirection = Phaser.Math.Vector2.RIGHT;
+                this.score = 0;
+                this.isAlive = false;
+
+                // Limites para que no dibuje fuera de pantalla
+                this.cols = Math.floor(this.scale.width / GRID_SIZE);
+                this.rows = Math.floor(this.scale.height / GRID_SIZE);
+
+                // Centrar el tablero
+                this.offsetX = (this.scale.width - (this.cols * GRID_SIZE)) / 2;
+                this.offsetY = (this.scale.height - (this.rows * GRID_SIZE)) / 2;
+
+                // Crear comida
+                this.food = this.add.image(0, 0, 'tex-food').setOrigin(0);
+                this.food.setVisible(false);
+
+                // Partículas (Efecto al comer)
+                this.particles = this.add.particles(0, 0, 'tex-particle', {
+                    speed: { min: 50, max: 150 },
+                    scale: { start: 1, end: 0 },
+                    alpha: { start: 1, end: 0 },
+                    lifespan: 600,
+                    emitting: false
+                });
+
+                // Temporizador de movimiento
+                this.moveTimer = this.time.addEvent({
+                    delay: TICK_RATE,
+                    callback: this.moveSnake,
+                    callbackScope: this,
+                    loop: true,
+                    paused: true
+                });
+
+                // --- CONTROLES MÓVILES (SWIPE) Y TECLADO ---
+                this.input.keyboard.on('keydown', this.handleKey, this);
+
+                this.input.on('pointerup', (pointer) => {
+                    if (!this.isAlive) return;
+                    const swipeTime = pointer.upTime - pointer.downTime;
+                    const swipe = new Phaser.Math.Vector2(pointer.upX - pointer.downX, pointer.upY - pointer.downY);
+
+                    if (swipeTime < 1000 && swipe.length() > 30) {
+                        // Ocultar hint de swipe si el usuario lo aprendió
+                        document.getElementById('swipe-hint').style.display = 'none';
+
+                        if (Math.abs(swipe.x) > Math.abs(swipe.y)) {
+                            // Horizontal
+                            if (swipe.x > 0 && this.direction.x === 0) {
+                                this.nextDirection = Phaser.Math.Vector2.RIGHT;
+                            } else if (swipe.x < 0 && this.direction.x === 0) {
+                                this.nextDirection = Phaser.Math.Vector2.LEFT;
+                            }
+                        } else {
+                            // Vertical
+                            if (swipe.y > 0 && this.direction.y === 0) {
+                                this.nextDirection = Phaser.Math.Vector2.DOWN;
+                            } else if (swipe.y < 0 && this.direction.y === 0) {
+                                this.nextDirection = Phaser.Math.Vector2.UP;
+                            }
+                        }
+                    }
+                });
+            }
+
+            generateTextures() {
+                // Borrar si existían
+                if (this.textures.exists('tex-head')) this.textures.remove('tex-head');
+                if (this.textures.exists('tex-body')) this.textures.remove('tex-body');
+                if (this.textures.exists('tex-food')) this.textures.remove('tex-food');
+                if (this.textures.exists('tex-particle')) this.textures.remove('tex-particle');
+                if (this.textures.exists('tex-star')) this.textures.remove('tex-star');
+
+                const g = this.make.graphics({ x: 0, y: 0, add: false });
+
+                // Nave Espacial (Cabeza). Forma de Triángulo/Flecha
+                g.fillStyle(currentSkin.head, 1);
+                // Dibuja un triángulo apuntando hacia la "derecha"
+                g.beginPath();
+                g.moveTo(GRID_SIZE - 2, GRID_SIZE / 2); // Punta
+                g.lineTo(2, GRID_SIZE - 2); // Esquina inferior izquierda
+                g.lineTo(2, 2); // Esquina superior izquierda
+                g.closePath();
+                g.fillPath();
+                g.generateTexture('tex-head', GRID_SIZE, GRID_SIZE);
+                g.clear();
+
+                // Estela/Vagones (Cuerpo)
+                g.fillStyle(currentSkin.body, 1);
+                // Círculo pequeño para simular el rastro de turbinas o módulos de carga esféricos
+                g.fillCircle(GRID_SIZE / 2, GRID_SIZE / 2, GRID_SIZE / 2 - 4);
+                g.generateTexture('tex-body', GRID_SIZE, GRID_SIZE);
+                g.clear();
+
+                // Comida (Cristal o Energía)
+                g.fillStyle(0x00E676, 1); // Verde brillante o cian para energía
+                g.beginPath();
+                g.moveTo(GRID_SIZE / 2, 2); // Arriba
+                g.lineTo(GRID_SIZE - 2, GRID_SIZE / 2); // Derecha
+                g.lineTo(GRID_SIZE / 2, GRID_SIZE - 2); // Abajo
+                g.lineTo(2, GRID_SIZE / 2); // Izquierda
+                g.closePath();
+                g.fillPath();
+
+                // Brillo interior del cristal
+                g.fillStyle(0xB2FF59, 1);
+                g.beginPath();
+                g.moveTo(GRID_SIZE / 2, 6);
+                g.lineTo(GRID_SIZE - 6, GRID_SIZE / 2);
+                g.lineTo(GRID_SIZE / 2, GRID_SIZE - 6);
+                g.lineTo(6, GRID_SIZE / 2);
+                g.closePath();
+                g.fillPath();
+                g.generateTexture('tex-food', GRID_SIZE, GRID_SIZE);
+                g.clear();
+
+                // Partícula de propulsión y explosión
+                g.fillStyle(currentSkin.uiStr.replace('#', '0x'), 1);
+                g.fillCircle(4, 4, 4);
+                g.generateTexture('tex-particle', 8, 8);
+                g.clear();
+
+                // Fondo de estrellas
+                g.fillStyle(0xffffff, 0.4);
+                g.fillCircle(1, 1, 1);
+                g.generateTexture('tex-star', 2, 2);
+            }
+
+            updateTextures() {
+                this.generateTextures();
+                // Aplicar a serpiente viva
+                if (this.snake.length > 0) {
+                    this.snake[0].setTexture('tex-head');
+                    for (let i = 1; i < this.snake.length; i++) {
+                        this.snake[i].setTexture('tex-body');
+                    }
+                }
+            }
+
+            handleKey(e) {
+                if (!this.isAlive) return;
+
+                // Ocultar hint si presiona teclado
+                document.getElementById('swipe-hint').style.display = 'none';
+
+                if (e.code === 'ArrowUp' && this.direction.y === 0) {
+                    this.nextDirection = Phaser.Math.Vector2.UP;
+                } else if (e.code === 'ArrowDown' && this.direction.y === 0) {
+                    this.nextDirection = Phaser.Math.Vector2.DOWN;
+                } else if (e.code === 'ArrowLeft' && this.direction.x === 0) {
+                    this.nextDirection = Phaser.Math.Vector2.LEFT;
+                } else if (e.code === 'ArrowRight' && this.direction.x === 0) {
+                    this.nextDirection = Phaser.Math.Vector2.RIGHT;
+                }
+            }
+
+            start() {
+                // Destruir serpiente vieja
+                this.snake.forEach(part => part.destroy());
+
+                this.snake = [];
+                this.score = 0;
+                this.direction = Phaser.Math.Vector2.RIGHT;
+                this.nextDirection = Phaser.Math.Vector2.RIGHT;
+                this.isAlive = true;
+
+                // Dinamizar fondo creando estrellas
+                if (!this.starsGroup) {
+                    this.starsGroup = this.add.group();
+                    for (let i = 0; i < 50; i++) {
+                        let star = this.add.image(
+                            Math.random() * this.scale.width,
+                            Math.random() * this.scale.height,
+                            'tex-star'
+                        );
+                        this.starsGroup.add(star);
+                    }
+                }
+
+                // Crear serpiente (3 partes iniciales en el centro)
+                const startGridX = Math.floor(this.cols / 2);
+                const startGridY = Math.floor(this.rows / 2);
+
+                for (let i = 0; i < 3; i++) {
+                    const tex = i === 0 ? 'tex-head' : 'tex-body';
+                    // Nota: el Origin(0.5) nos facilitará la rotación de la nave
+                    const part = this.add.image(
+                        this.offsetX + (startGridX - i) * GRID_SIZE + GRID_SIZE / 2,
+                        this.offsetY + startGridY * GRID_SIZE + GRID_SIZE / 2,
+                        tex
+                    ).setOrigin(0.5);
+                    // Efecto de pop in
+                    part.setScale(0);
+                    this.tweens.add({ targets: part, scale: i === 0 ? 1.2 : 1, duration: 200, ease: 'Back.out' });
+                    this.snake.push(part);
+                }
+
+                this.placeFood();
+                this.food.setVisible(true);
+
+                uiLayer.style.display = 'flex';
+                scoreDisplay.innerText = this.score;
+                document.getElementById('swipe-hint').style.display = 'block';
+
+                this.moveTimer.paused = false;
+            }
+
+            placeFood() {
+                let valid = false;
+                let rx, ry;
+                while (!valid) {
+                    rx = Math.floor(Math.random() * this.cols);
+                    ry = Math.floor(Math.random() * this.rows);
+                    valid = true;
+                    // Verificar que no caiga en la serpiente
+                    const realX = this.offsetX + rx * GRID_SIZE;
+                    const realY = this.offsetY + ry * GRID_SIZE;
+                    for (let part of this.snake) {
+                        if (part.x === realX && part.y === realY) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+
+                this.food.setPosition(this.offsetX + rx * GRID_SIZE, this.offsetY + ry * GRID_SIZE);
+                this.food.setOrigin(0); // Comida es desde la esquina
+                // Minianimacion de la comida cuando aparece
+                this.food.setScale(0);
+                this.tweens.add({ targets: this.food, scale: 1, duration: 300, ease: 'Bounce.out' });
+            }
+
+            updateRotation(head) {
+                // Rotar la nave según a donde apunte
+                if (this.direction.x === 1) head.angle = 0; // Der
+                else if (this.direction.x === -1) head.angle = 180; // Izq
+                else if (this.direction.y === 1) head.angle = 90; // Abajo
+                else if (this.direction.y === -1) head.angle = -90; // Arriba
+            }
+
+            moveSnake() {
+                if (!this.isAlive) return;
+
+                this.direction = this.nextDirection;
+
+                const head = this.snake[0];
+                // Como ahora head tiene Origin(0.5) para rotar en su centro, pero la física la medimos en su esquina real
+                const currentGridX = head.x - GRID_SIZE / 2;
+                const currentGridY = head.y - GRID_SIZE / 2;
+
+                const nx = currentGridX + this.direction.x * GRID_SIZE;
+                const ny = currentGridY + this.direction.y * GRID_SIZE;
+
+                this.updateRotation(head);
+
+                // Colisiones paredes (Límites fijos sin cruzar el borde)
+                if (nx < this.offsetX || nx >= this.offsetX + this.cols * GRID_SIZE ||
+                    ny < this.offsetY || ny >= this.offsetY + this.rows * GRID_SIZE) {
+                    this.gameOver();
+                    return;
+                }
+
+                // Colisiones cuerpo (comparamos cuadrículas, sin el offset del origen 0.5)
+                for (let i = 0; i < this.snake.length; i++) {
+                    const bx = this.snake[i].x - GRID_SIZE / 2;
+                    const by = this.snake[i].y - GRID_SIZE / 2;
+                    if (bx === nx && by === ny) {
+                        this.gameOver();
+                        return;
+                    }
+                }
+
+                // Mover cola a la posición vieja de cabeza
+                let tail = this.snake.pop();
+
+                // ¿Comió comida? (Recordar: comida usa setOrigin(0) a diferencia de la nave)
+                if (nx === this.food.x && ny === this.food.y) {
+                    // Crecimiento: no perdemos la cola, la dejamos donde estaba clonando un body
+                    const newPart = this.add.image(tail.x, tail.y, 'tex-body').setOrigin(0.5);
+                    this.snake.push(newPart);
+                    this.snake.push(tail); // Volvemos a meter la cola al final
+
+                    // Solo la cola real se mueve a nueva cabeza
+                    tail = this.add.image(0, 0, 'tex-head').setOrigin(0.5); // Nueva nave
+                    tail.setScale(1.2);
+                    this.snake[0].setTexture('tex-body'); // Vieja cabeza a módulo esférico
+                    this.snake[0].setScale(1); // Reset escala
+
+                    // Propulsión / Chispas
+                    this.particles.emitParticleAt(nx + GRID_SIZE / 2, ny + GRID_SIZE / 2, 15);
+
+                    this.score += 50; // Más épico en el espacio
+                    scoreDisplay.innerText = this.score;
+                    // Efecto rebote en puntaje
+                    scoreDisplay.style.transform = 'scale(1.3)';
+                    setTimeout(() => scoreDisplay.style.transform = 'scale(1)', 150);
+
+                    this.placeFood();
+                }
+
+                tail.setPosition(nx + GRID_SIZE / 2, ny + GRID_SIZE / 2);
+                this.updateRotation(tail);
+                // Asegurar que head es el primero y tiene tex de head (si no creció arriba)
+                if (tail !== this.snake[this.snake.length - 1]) {
+                    this.snake[0].setTexture('tex-body');
+                    this.snake[0].setScale(1);
+                    this.snake[0].angle = 0; // Vagones no rotan
+                    tail.setTexture('tex-head');
+                    tail.setScale(1.2);
+                }
+                this.snake.unshift(tail);
+            }
+
+            gameOver() {
+                this.isAlive = false;
+                this.moveTimer.paused = true;
+
+                // Animación de muerte (vibrar cámara y teñir rojo)
+                this.cameras.main.shake(300, 0.015);
+                this.cameras.main.flash(300, 255, 0, 0, false);
+
+                if (this.score > bestScore) {
+                    bestScore = this.score;
+                    localStorage.setItem('spaceSnakeBestScore', bestScore);
+                }
+
+                setTimeout(() => {
+                    uiLayer.style.display = 'none';
+                    document.getElementById('menu-title').innerText = 'JUEGO TERMINADO';
+                    document.getElementById('menu-subtitle').innerText = `Puntaje: ${this.score} | Mejor: ${bestScore}`;
+                    btnPlay.innerText = 'VOLVER A JUGAR';
+                    menuLayer.style.display = 'flex';
+                }, 800);
+            }
+        }
+
+        const config = {
+            type: Phaser.WEBGL, // Forzar WebGL para rendimiento y anti-aliasing (apariencia de app nativa)
+            width: window.innerWidth,
+            height: window.innerHeight,
+            parent: 'game-container',
+            backgroundColor: '#050510', /* Fondo azul muy oscuro espacial */
+            scene: SnakeGame,
+            scale: {
+                mode: Phaser.Scale.RESIZE,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            }
+        };
+
+        game = new Phaser.Game(config);
+
+        // Disparado desde el botón HTML
+        window.startGame = () => {
+            menuLayer.style.display = 'none';
+            if (gameScene) {
+                gameScene.start();
+            }
+        };
+
+        // Redimensionamiento
+        window.addEventListener('resize', () => {
+            if (gameScene && gameScene.scale) {
+                gameScene.cols = Math.floor(window.innerWidth / GRID_SIZE);
+                gameScene.rows = Math.floor(window.innerHeight / GRID_SIZE);
+                gameScene.offsetX = (window.innerWidth - (gameScene.cols * GRID_SIZE)) / 2;
+                gameScene.offsetY = (window.innerHeight - (gameScene.rows * GRID_SIZE)) / 2;
+            }
+            // Actualizar variables CSS para áreas seguras (notch en iOS)
+            document.documentElement.style.setProperty('--sat', 'env(safe-area-inset-top)');
+        });
+
+    </script>
+</body>
+
+</html>
