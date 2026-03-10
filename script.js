@@ -270,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const successMsg = document.getElementById('form-success');
 
     if (contactForm) {
-        contactForm.addEventListener('submit', (e) => {
+        contactForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const submitBtn = contactForm.querySelector('button[type="submit"]');
@@ -278,16 +278,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const loadStr = currentLang === 'es' ? 'Enviando...' : 'Sending...';
             submitBtn.innerHTML = `<i class="ri-loader-4-line ri-spin"></i> ${loadStr}`;
+            submitBtn.disabled = true;
 
-            setTimeout(() => {
+            try {
+                const response = await fetch(contactForm.action, {
+                    method: contactForm.method,
+                    body: new FormData(contactForm),
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    submitBtn.innerHTML = originalText;
+                    successMsg.style.display = 'block';
+                    contactForm.reset();
+
+                    setTimeout(() => {
+                        successMsg.style.display = 'none';
+                    }, 4000);
+                } else {
+                    const errorStr = currentLang === 'es' ? 'Error al enviar' : 'Error sending message';
+                    alert(errorStr);
+                    submitBtn.innerHTML = originalText;
+                }
+            } catch (error) {
+                const errorStr = currentLang === 'es' ? 'Error de conexión' : 'Connection error';
+                alert(errorStr);
                 submitBtn.innerHTML = originalText;
-                successMsg.style.display = 'block';
-                contactForm.reset();
-
-                setTimeout(() => {
-                    successMsg.style.display = 'none';
-                }, 4000);
-            }, 1000);
+            } finally {
+                submitBtn.disabled = false;
+            }
         });
     }
 });
