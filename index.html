@@ -316,18 +316,18 @@
                     </div>
 
                     <div class="contact-form-wrapper glass-panel reveal tilt-effect">
-                        <form id="contactForm">
+                        <form id="contactForm" action="https://formspree.io/f/maqpqrqy" method="POST">
                             <h3 data-i18n="contact_form_title">Send a Message</h3>
                             <div class="form-group">
-                                <input type="text" id="name" data-i18n-prop="placeholder" data-i18n="contact_form_name"
-                                    placeholder="Your Name" required>
+                                <input type="text" id="name" name="name" data-i18n-prop="placeholder"
+                                    data-i18n="contact_form_name" placeholder="Your Name" required>
                             </div>
                             <div class="form-group">
-                                <input type="email" id="email" data-i18n-prop="placeholder"
+                                <input type="email" id="email" name="email" data-i18n-prop="placeholder"
                                     data-i18n="contact_form_email" placeholder="Your Email" required>
                             </div>
                             <div class="form-group">
-                                <textarea id="message" rows="4" data-i18n-prop="placeholder"
+                                <textarea id="message" name="message" rows="4" data-i18n-prop="placeholder"
                                     data-i18n="contact_form_msg" placeholder="Your Message" required></textarea>
                             </div>
                             <!-- Note: button HTML structure is maintained inside translation dict -->
